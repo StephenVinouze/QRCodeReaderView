@@ -83,6 +83,10 @@ public final class CameraManager {
     return configManager.getCameraResolution();
   }
 
+  public int getPreviewFormat() {
+    return openCamera.getCamera().getParameters().getPreviewFormat();
+  }
+
   /**
    * Opens the camera driver and initializes the hardware parameters.
    *
@@ -90,7 +94,7 @@ public final class CameraManager {
    * @param height @throws IOException Indicates the camera driver failed to open.
    */
   public synchronized void openDriver(SurfaceHolder holder, int width, int height)
-      throws IOException {
+          throws IOException {
     OpenCamera theCamera = openCamera;
     if (!isOpen()) {
       theCamera = OpenCameraInterface.open(requestedCameraId);
@@ -111,7 +115,7 @@ public final class CameraManager {
     Camera cameraObject = theCamera.getCamera();
     Camera.Parameters parameters = cameraObject.getParameters();
     String parametersFlattened =
-        parameters == null ? null : parameters.flatten(); // Save these, temporarily
+            parameters == null ? null : parameters.flatten(); // Save these, temporarily
     try {
       configManager.setDesiredCameraParameters(theCamera, false);
     } catch (RuntimeException re) {

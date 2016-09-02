@@ -23,6 +23,7 @@ import android.hardware.Camera;
 import android.os.AsyncTask;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.Pair;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -54,7 +55,7 @@ import java.util.Map;
 public class QRCodeReaderView extends SurfaceView implements SurfaceHolder.Callback, Camera.PreviewCallback {
 
   public interface OnQRCodeReadListener {
-    void onQRCodeRead(String text, PointF[] points);
+    void onQRCodeRead(String text, PointF[] points, byte[] data);
   }
 
   private static final String TAG = QRCodeReaderView.class.getName();
@@ -84,6 +85,14 @@ public class QRCodeReaderView extends SurfaceView implements SurfaceHolder.Callb
     } else {
       throw new RuntimeException("Error: Camera not found");
     }
+  }
+
+  public Point getPreviewSize() {
+    return mCameraManager.getPreviewSize();
+  }
+
+  public int getPreviewFormat() {
+    return mCameraManager.getPreviewFormat();
   }
 
   /**
@@ -309,7 +318,7 @@ public class QRCodeReaderView extends SurfaceView implements SurfaceHolder.Callb
     return result;
   }
 
-  private static class DecodeFrameTask extends AsyncTask<byte[], Void, Result> {
+  private static class DecodeFrameTask extends AsyncTask<byte[], Void, Pair<Result, byte[]>> {
 
     private final WeakReference<QRCodeReaderView> viewRef;
     private final WeakReference<Map<DecodeHintType, Object>> hintsRef;
@@ -319,16 +328,17 @@ public class QRCodeReaderView extends SurfaceView implements SurfaceHolder.Callb
       hintsRef = new WeakReference<>(hints);
     }
 
-    @Override protected Result doInBackground(byte[]... params) {
+    @Override protected Pair<Result, byte[]> doInBackground(byte[]... params) {
       final QRCodeReaderView view = viewRef.get();
       if (view == null) {
         return null;
       }
 
-      final PlanarYUVLuminanceSource source = view.mCameraManager.buildLuminanceSource(params[0], view.mPreviewWidth, view.mPreviewHeight);
+      final byte[] data = params[0];
+      final PlanarYUVLuminanceSource source = view.mCameraManager.buildLuminanceSource(data, view.mPreviewWidth, view.mPreviewHeight);
       final BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
       try {
-        return view.mQRCodeReader.decode(bitmap, hintsRef.get());
+        return new Pair<>(view.mQRCodeReader.decode(bitmap, hintsRef.get()), data);
       } catch (ChecksumException | NotFoundException | FormatException e) {
         Log.d(TAG, "", e);
       } finally {
@@ -338,7 +348,7 @@ public class QRCodeReaderView extends SurfaceView implements SurfaceHolder.Callb
       return null;
     }
 
-    @Override protected void onPostExecute(Result result) {
+    @Override protected void onPostExecute(Pair<Result, byte[]> result) {
       super.onPostExecute(result);
 
       final QRCodeReaderView view = viewRef.get();
@@ -346,8 +356,9 @@ public class QRCodeReaderView extends SurfaceView implements SurfaceHolder.Callb
       // Notify we found a QRCode
       if (view != null && result != null && view.mOnQRCodeReadListener != null) {
         // Transform resultPoints to View coordinates
-        final PointF[] transformedPoints = transformToViewCoordinates(view, result.getResultPoints());
-        view.mOnQRCodeReadListener.onQRCodeRead(result.getText(), transformedPoints);
+        final Result qrcodeResult = result.first;
+        final PointF[] transformedPoints = transformToViewCoordinates(view, qrcodeResult.getResultPoints());
+        view.mOnQRCodeReadListener.onQRCodeRead(qrcodeResult.getText(), transformedPoints, result.second);
       }
     }
 
